@@ -64,7 +64,7 @@ function parseVmess(link) {
   const raw = link.slice('vmess://'.length).trim();
   const obj = JSON.parse(b64DecodeUtf8(raw));
   return {
-    type: 'vmess',
+    输入: 'vmess',
     name: obj.ps || 'vmess',
     server: obj.add,
     port: Number(obj.port || 443),
@@ -227,7 +227,7 @@ function renderClash(nodes) {
           `    uuid: ${node.uuid}`,
           `    alterId: 0`,
           `    cipher: ${node.cipher || 'auto'}`,
-          `    udp: true`,
+          `    udp: true`，
           `    tls: ${node.tls ? 'true' : 'false'}`,
           `    network: ${node.network || 'ws'}`,
         ];
@@ -468,7 +468,7 @@ async function handleGenerate(request, env, url) {
 
   if (!id) {
     id = await createUniqueShortId(env);
-    const ttl = 60 * 60 * 24 * 7; // 7天
+    const ttl = 60 * 60 * 24 * 3650; // 7天
 
     await env.SUB_STORE.put(`sub:${id}`, JSON.stringify(payload), {
       expirationTtl: ttl,
