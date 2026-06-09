@@ -1,10 +1,17 @@
 name = "cloudflaresub"
 main = "src/worker.js"
-compatibility_date = "2026-03-06"
-workers_dev = true
+compatibility_date = "2026-06-09"
 
+# 关键：让 /admin、/api、/sub 先进入 Worker，不要被旧静态首页拦截。
+# 如果你的仓库有 public 目录，保留这一段。
+# 如果部署时报 directory = "./public" 不存在，再删除整个 [assets] 段。
 [assets]
 directory = "./public"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/sub/*"]
+run_worker_first = true
+
+# 这里必须换成你自己的 KV Namespace ID。
+# Cloudflare → Storage & Databases → KV → 你的 SUB_STORE → Namespace ID
+[[kv_namespaces]]
+binding = "SUB_STORE"
+id = "fc40891d8f8746a2ae434a83e49cbb1e"
