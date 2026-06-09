@@ -631,6 +631,71 @@ async function handleAdminGet(url, env) {
   });
 }
 
+function cleanBaseNodeName(name = '') {
+  const parts = String(name || '').split('|').map((x) => x.trim()).filter(Boolean);
+  return parts[0] || String(name || 'node').trim() || 'node';
+}
+
+function deriveBaseNodesFromRecord(record) {
+  if (record?.input?.nodeLinks) {
+    const parsed = parseRawLinks(record.input.nodeLinks);
+    if (parsed.length) return parsed;
+  }
+
+  const nodes = Array.isArray(record?.nodes) ? record.nodes : [];
+  const seen = new Set();
+  const bases = [];
+
+  for (const n of nodes) {
+    const key = [
+      n.type || '',
+      n.uuid || n.password || '',
+      n.network || '',
+      n.tls ? 'tls' : 'notls',
+      n.host || '',
+      n.sni || '',
+      n.path || '',
+      n.cipher || '',
+      n.flow || '',
+    ].join('\u0001');
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    bases.push({
+      ...n,
+      name: cleanBaseNodeName(n.name),
+    });
+  }
+
+  return bases;
+}
+
+function buildPayloadFromBaseNodes(baseNodes, body, existingRecord) {
+  const preferredEndpoints = parsePreferredEndpoints(body.preferredIps || '');
+  if (!baseNodes.length) throw new Error('没有可用的原始节点。请先填写原始节点链接 nodeLinks');
+  if (!preferredEndpoints.length) throw new Error('没有识别到可用优选地址');
+
+  const options = {
+    namePrefix: body.namePrefix || existingRecord?.options?.namePrefix || '',
+    keepOriginalHost: body.keepOriginalHost !== false,
+  };
+  const nodes = buildNodes(baseNodes, preferredEndpoints, options);
+
+  return {
+    version: 3,
+    createdAt: existingRecord?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    options,
+    input: {
+      nodeLinks: String(body.nodeLinks || existingRecord?.input?.nodeLinks || ''),
+      preferredIps: String(body.preferredIps || ''),
+      namePrefix: String(options.namePrefix || ''),
+      keepOriginalHost: options.keepOriginalHost,
+    },
+    nodes,
+  };
+}
+
 async function handleAdminUpdate(request, env, url) {
   const tokenCheck = validateAdminToken(url, env);
   if (!tokenCheck.ok) return tokenCheck.response;
@@ -645,9 +710,21 @@ async function handleAdminUpdate(request, env, url) {
   const id = String(body.id || '').trim();
   if (!isValidId(id)) return json({ ok: false, error: 'id 不合法' }, 400);
 
+  let existingRecord = null;
+  const existingRaw = await env.SUB_STORE.get(`sub:${id}`);
+  if (existingRaw) {
+    try { existingRecord = JSON.parse(existingRaw); } catch {}
+  }
+
   let payload;
   try {
-    payload = buildPayloadFromInput(body);
+    if (String(body.nodeLinks || '').trim()) {
+      payload = buildPayloadFromInput({ ...body, createdAt: existingRecord?.createdAt });
+    } else {
+      // 允许旧订阅只改 IP：没有原始节点链接时，从旧 nodes 里反推基础节点。
+      const baseNodes = deriveBaseNodesFromRecord(existingRecord);
+      payload = buildPayloadFromBaseNodes(baseNodes, body, existingRecord);
+    }
   } catch (e) {
     return json({ ok: false, error: e.message }, 400);
   }
@@ -657,6 +734,7 @@ async function handleAdminUpdate(request, env, url) {
   return json({
     ok: true,
     id,
+    message: String(body.nodeLinks || '').trim() ? '已用原始节点重新生成订阅' : '已基于旧订阅直接更新优选 IP',
     urls: makeUrls(url.origin, id, env.SUB_ACCESS_TOKEN || ''),
     counts: {
       outputNodes: payload.nodes.length,
@@ -683,6 +761,47 @@ async function handleAdminDelete(request, env, url) {
   return json({ ok: true, deleted: id });
 }
 
+
+function injectAdminEntryIntoHomePage(pageHtml) {
+  const adminEntry = `
+<style>
+  .cfsub-admin-entry{position:fixed;right:22px;bottom:22px;z-index:99999;display:flex;gap:10px;align-items:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .cfsub-admin-entry a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:999px;padding:11px 15px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.18)}
+  .cfsub-admin-entry .main{background:#2563eb;color:#fff}
+  .cfsub-admin-entry .fallback{background:rgba(15,23,42,.88);color:#e5e7eb}
+  @media(max-width:640px){.cfsub-admin-entry{right:14px;bottom:14px;flex-direction:column;align-items:flex-end}.cfsub-admin-entry a{font-size:13px;padding:10px 13px}}
+</style>
+<div class="cfsub-admin-entry">
+  <a class="main" href="/admin" title="进入 CloudflareSub 管理后台">管理后台</a>
+  <a class="fallback" href="/api/admin/ui" title="如果 /admin 被静态页拦截，可点这里">备用入口</a>
+</div>`;
+  if (pageHtml.includes('cfsub-admin-entry')) return pageHtml;
+  if (pageHtml.includes('</body>')) return pageHtml.replace('</body>', adminEntry + '\n</body>');
+  return pageHtml + adminEntry;
+}
+
+async function fetchAssetWithAdminEntry(request, env) {
+  const response = await env.ASSETS.fetch(request);
+  const url = new URL(request.url);
+  const contentType = response.headers.get('content-type') || '';
+  const shouldInject = request.method === 'GET' &&
+    (url.pathname === '/' || url.pathname === '/index.html') &&
+    contentType.toLowerCase().includes('text/html');
+
+  if (!shouldInject) return response;
+
+  const body = await response.text();
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.set('content-type', 'text/html; charset=utf-8');
+  headers.set('cache-control', 'no-store');
+  return new Response(injectAdminEntryIntoHomePage(body), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function renderAdminPage() {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -691,37 +810,38 @@ function renderAdminPage() {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CloudflareSub 管理后台</title>
   <style>
-    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1050px;margin:24px auto;padding:0 16px;background:#f7f7f8;color:#111}
-    h1{font-size:24px}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    label{display:block;margin:10px 0 6px;font-weight:600}
-    input,textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
-    textarea{min-height:120px}
-    button{border:0;border-radius:8px;padding:9px 13px;margin:6px 6px 6px 0;cursor:pointer;background:#111827;color:#fff}
-    button.secondary{background:#374151}
-    button.danger{background:#b91c1c}
-    pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;overflow:auto}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media(max-width:780px){.row{grid-template-columns:1fr}}
-    .muted{color:#6b7280;font-size:13px}
+    :root{--bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--primary:#111827;--blue:#2563eb;--red:#b91c1c;--green:#047857}
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1120px;margin:24px auto;padding:0 16px;background:var(--bg);color:var(--text)}
+    h1{font-size:26px;margin:0 0 8px}.sub{color:var(--muted);margin:0 0 18px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    label{display:block;margin:10px 0 6px;font-weight:650}input,textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:9px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:#fff}textarea{min-height:110px}button{border:0;border-radius:9px;padding:10px 14px;margin:6px 6px 6px 0;cursor:pointer;background:var(--primary);color:#fff;font-weight:650}button.secondary{background:#374151}button.blue{background:var(--blue)}button.danger{background:var(--red)}button.green{background:var(--green)}button:disabled{opacity:.5;cursor:not-allowed}pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px;overflow:auto;max-height:320px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:820px){.row{grid-template-columns:1fr}}.muted{color:var(--muted);font-size:13px}.ok{color:var(--green);font-weight:700}.bad{color:var(--red);font-weight:700}.pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 9px;margin:3px;background:#f9fafb;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:13px}code{background:#eef2ff;padding:2px 5px;border-radius:5px}.small{font-size:12px}.status{padding:10px 12px;border-radius:10px;background:#eef2ff;color:#1e3a8a;margin-top:10px}.status.err{background:#fef2f2;color:#991b1b}.status.ok{background:#ecfdf5;color:#065f46}
   </style>
 </head>
 <body>
   <h1>CloudflareSub 管理后台</h1>
-  <p class="muted">用于固定订阅 ID、添加/更换优选 IP、保持 v2rayN/小火箭订阅 URL 不变。</p>
+  <p class="sub">更简单的版本：可以直接粘贴完整订阅链接，后台自动提取订阅 ID 和 Token；也可以直接列出已有订阅并一键载入。</p>
 
   <div class="card">
-    <label>管理 Token（SUB_ACCESS_TOKEN）</label>
-    <input id="token" placeholder="输入 SUB_ACCESS_TOKEN" />
+    <label>① 粘贴完整订阅链接，一键提取</label>
+    <input id="subUrl" placeholder="例如：https://你的域名/sub/BSEMXUeWJK?target=raw&token=xxxx" />
+    <button class="blue" onclick="extractFromUrl()">从订阅链接提取 ID 和 Token</button>
+    <button class="secondary" onclick="testCurrentSub()">测试这个订阅是否可访问</button>
+    <div id="status" class="status">等待操作。</div>
+  </div>
+
+  <div class="card">
+    <label>② 管理 Token（SUB_ACCESS_TOKEN）</label>
+    <input id="token" placeholder="输入 SUB_ACCESS_TOKEN；也可以从上面的订阅链接自动提取" />
     <button onclick="saveToken()">保存 Token</button>
-    <button class="secondary" onclick="listSubs()">列出订阅</button>
+    <button class="secondary" onclick="listSubs()">列出已有订阅</button>
+    <span class="muted">保存 Token 只是保存到当前浏览器 localStorage，不会修改 Cloudflare 变量。</span>
+    <div id="subList"></div>
   </div>
 
   <div class="card">
     <div class="row">
       <div>
-        <label>订阅 ID</label>
-        <input id="subId" placeholder="例如 auto / mycf / AbC123xYz9" />
+        <label>③ 订阅 ID</label>
+        <input id="subId" placeholder="例如 auto / mycf / BSEMXUeWJK" />
       </div>
       <div>
         <label>名称前缀 namePrefix</label>
@@ -732,13 +852,13 @@ function renderAdminPage() {
     <label><input type="checkbox" id="keepOriginalHost" checked style="width:auto"> 保留原始 Host/SNI（建议开启）</label>
 
     <label>原始节点链接 nodeLinks</label>
-    <textarea id="nodeLinks" placeholder="粘贴 vless:// / vmess:// / trojan:// 原始节点。旧订阅如果没有保存原始节点，需要你手动补填。"></textarea>
+    <textarea id="nodeLinks" placeholder="粘贴 vless:// / vmess:// / trojan:// 原始节点。注意：新版支持旧订阅只改 IP；如果这里为空，也可以直接保存优选 IP，系统会尝试从旧订阅反推基础节点。"></textarea>
 
     <label>优选 IP preferredIps</label>
-    <textarea id="preferredIps" placeholder="104.16.1.2:443#CF-01&#10;104.17.2.3:443#CF-02"></textarea>
+    <textarea id="preferredIps" placeholder="104.16.1.2:443#CF-01\n104.17.2.3:443#CF-02"></textarea>
 
     <button onclick="loadSub()">读取订阅</button>
-    <button onclick="updateSub()">保存/更新这个 ID</button>
+    <button class="green" onclick="updateSub()">保存/更新这个 ID</button>
     <button class="danger" onclick="deleteSub()">删除这个 ID</button>
   </div>
 
@@ -751,33 +871,94 @@ function renderAdminPage() {
 const $ = id => document.getElementById(id);
 $('token').value = localStorage.getItem('sub_token') || '';
 
-function tokenQS() {
-  return '?token=' + encodeURIComponent($('token').value.trim());
+function setStatus(msg, type){
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'status ' + (type || '');
 }
+function tokenQS() { return '?token=' + encodeURIComponent($('token').value.trim()); }
+function out(x){ $('result').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); }
+function origin(){ return location.origin; }
+function rawUrl(id){ return origin() + '/sub/' + encodeURIComponent(id) + '?target=raw&token=' + encodeURIComponent($('token').value.trim()); }
+
 function saveToken(){
-  localStorage.setItem('sub_token', $('token').value.trim());
-  out('已保存 Token 到浏览器 localStorage。');
+  const t = $('token').value.trim();
+  if(!t){ setStatus('Token 为空。请先填 SUB_ACCESS_TOKEN，或从订阅链接提取。','err'); return; }
+  localStorage.setItem('sub_token', t);
+  setStatus('Token 已保存到当前浏览器。现在可以点击“列出已有订阅”。','ok');
+  out({ok:true,message:'Token 已保存到浏览器 localStorage。'});
 }
-function out(x){
-  $('result').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2);
+
+function extractFromUrl(){
+  const v = $('subUrl').value.trim();
+  if(!v){ setStatus('请先粘贴完整订阅链接。','err'); return; }
+  let u;
+  try { u = new URL(v, location.origin); } catch(e) { setStatus('订阅链接格式不正确。','err'); out(String(e)); return; }
+  const parts = u.pathname.split('/').filter(Boolean);
+  const subIndex = parts.indexOf('sub');
+  const id = subIndex >= 0 ? parts[subIndex + 1] : '';
+  const token = u.searchParams.get('token') || '';
+  if(!id){ setStatus('没有从链接里识别到 /sub/订阅ID。','err'); return; }
+  $('subId').value = id;
+  if(token){ $('token').value = token; localStorage.setItem('sub_token', token); }
+  setStatus('已提取：订阅 ID = ' + id + (token ? '，Token 已填入并保存。' : '。但链接里没有 token。'), 'ok');
+  out({ok:true,id,token: token ? '已提取' : '未找到'});
 }
+
+async function testCurrentSub(){
+  const id = $('subId').value.trim();
+  if(!id){ extractFromUrl(); }
+  const finalId = $('subId').value.trim();
+  if(!finalId){ return; }
+  const r = await fetch(rawUrl(finalId));
+  const txt = await r.text();
+  setStatus(r.ok ? '订阅可访问。HTTP ' + r.status : '订阅不可访问。HTTP ' + r.status, r.ok ? 'ok' : 'err');
+  out(txt.slice(0, 800));
+}
+
+function renderList(items){
+  if(!items || !items.length){ $('subList').innerHTML = '<p class="muted">没有找到订阅。</p>'; return; }
+  const rows = items.map(it => {
+    const id = it.id;
+    const url = rawUrl(id);
+    return '<tr>' +
+      '<td><code>' + escapeHtml(id) + '</code></td>' +
+      '<td class="small">' + (it.expiration ? new Date(it.expiration*1000).toLocaleString() : '无/未知') + '</td>' +
+      '<td><button class="secondary" onclick="selectSub(\'' + escapeJs(id) + '\')">载入</button><button onclick="copyText(\'' + escapeJs(url) + '\')">复制 raw 链接</button></td>' +
+      '</tr>';
+  }).join('');
+  $('subList').innerHTML = '<table><thead><tr><th>订阅 ID</th><th>过期时间</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+function escapeHtml(s){ return String(s).replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escapeJs(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+async function copyText(t){ await navigator.clipboard.writeText(t); setStatus('已复制：' + t, 'ok'); }
+async function selectSub(id){ $('subId').value = id; await loadSub(); }
+
 async function listSubs(){
+  const t = $('token').value.trim();
+  if(!t){ setStatus('请先填写或提取 Token。','err'); return; }
   const r = await fetch('/api/admin/list' + tokenQS());
   const j = await r.json();
   out(j);
+  if(j.ok){ setStatus('已列出 ' + j.count + ' 条订阅。点击“载入”即可编辑。','ok'); renderList(j.items); }
+  else { setStatus('列出失败：' + (j.error || '未知错误'), 'err'); }
 }
+
 async function loadSub(){
   const id = $('subId').value.trim();
+  if(!id){ setStatus('请先填写订阅 ID，或粘贴订阅链接提取。','err'); return; }
   const r = await fetch('/api/admin/get' + tokenQS() + '&id=' + encodeURIComponent(id));
   const j = await r.json();
   if(j.ok){
     $('nodeLinks').value = j.editable.nodeLinks || '';
     $('preferredIps').value = j.editable.preferredIps || '';
-    $('namePrefix').value = j.editable.namePrefix || '';
+    $('namePrefix').value = j.editable.namePrefix || 'CF';
     $('keepOriginalHost').checked = j.editable.keepOriginalHost !== false;
-  }
+    setStatus(j.editable.hasOriginalInput ? '读取成功。可直接修改 IP 后保存。' : '读取成功。旧订阅没有保存原始节点，但新版支持直接修改 IP 后保存。', 'ok');
+  } else { setStatus('读取失败：' + (j.error || '未知错误'), 'err'); }
   out(j);
 }
+
 async function updateSub(){
   const payload = {
     id: $('subId').value.trim(),
@@ -786,22 +967,24 @@ async function updateSub(){
     namePrefix: $('namePrefix').value,
     keepOriginalHost: $('keepOriginalHost').checked
   };
+  if(!payload.id){ setStatus('订阅 ID 不能为空。','err'); return; }
+  if(!payload.preferredIps.trim()){ setStatus('优选 IP 不能为空。','err'); return; }
   const r = await fetch('/api/admin/update' + tokenQS(), {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body: JSON.stringify(payload)
+    method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(payload)
   });
   const j = await r.json();
+  if(j.ok){ setStatus('保存成功。旧订阅链接不变，客户端更新订阅即可。', 'ok'); }
+  else { setStatus('保存失败：' + (j.error || '未知错误'), 'err'); }
   out(j);
 }
+
 async function deleteSub(){
   if(!confirm('确认删除这个订阅？')) return;
   const r = await fetch('/api/admin/delete' + tokenQS(), {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body: JSON.stringify({ id: $('subId').value.trim() })
+    method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id: $('subId').value.trim() })
   });
   const j = await r.json();
+  if(j.ok){ setStatus('已删除订阅：' + j.deleted, 'ok'); listSubs(); } else { setStatus('删除失败：' + (j.error || '未知错误'), 'err'); }
   out(j);
 }
 </script>
@@ -827,7 +1010,10 @@ export default {
       return text('Missing KV binding: SUB_STORE', 500);
     }
 
-    if (request.method === 'GET' && url.pathname === '/admin') {
+    // Management UI. /api/admin/ui is deliberately placed under /api because
+    // some Workers + Assets deployments serve the old SPA for /admin before the script runs.
+    // /api/admin/ui is stable in that deployment mode because /api routes enter the Worker.
+    if (request.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/api/admin' || url.pathname === '/api/admin/ui')) {
       return html(renderAdminPage());
     }
 
@@ -858,11 +1044,11 @@ export default {
     // Pages deployment has env.ASSETS; direct Workers deployment may not.
     // Keep the original static assets when available, otherwise show /admin on root and 404 for unknown paths.
     if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return env.ASSETS.fetch(request);
+      return fetchAssetWithAdminEntry(request, env);
     }
     if (request.method === 'GET' && url.pathname === '/') {
       return html(renderAdminPage());
     }
-    return text('Not found. Visit /admin for the enhanced management page.', 404);
+    return text('Not found. Visit /api/admin/ui for the enhanced management page.', 404);
   },
 };
