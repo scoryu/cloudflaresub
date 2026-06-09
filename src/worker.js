@@ -810,30 +810,36 @@ function renderAdminPage() {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CloudflareSub 管理后台</title>
   <style>
-    :root{--bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--primary:#111827;--blue:#2563eb;--red:#b91c1c;--green:#047857}
+    :root{--bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--primary:#111827;--blue:#2563eb;--red:#b91c1c;--green:#047857;--yellow:#92400e}
     body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1120px;margin:24px auto;padding:0 16px;background:var(--bg);color:var(--text)}
-    h1{font-size:26px;margin:0 0 8px}.sub{color:var(--muted);margin:0 0 18px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    label{display:block;margin:10px 0 6px;font-weight:650}input,textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:9px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:#fff}textarea{min-height:110px}button{border:0;border-radius:9px;padding:10px 14px;margin:6px 6px 6px 0;cursor:pointer;background:var(--primary);color:#fff;font-weight:650}button.secondary{background:#374151}button.blue{background:var(--blue)}button.danger{background:var(--red)}button.green{background:var(--green)}button:disabled{opacity:.5;cursor:not-allowed}pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px;overflow:auto;max-height:320px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:820px){.row{grid-template-columns:1fr}}.muted{color:var(--muted);font-size:13px}.ok{color:var(--green);font-weight:700}.bad{color:var(--red);font-weight:700}.pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 9px;margin:3px;background:#f9fafb;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:13px}code{background:#eef2ff;padding:2px 5px;border-radius:5px}.small{font-size:12px}.status{padding:10px 12px;border-radius:10px;background:#eef2ff;color:#1e3a8a;margin-top:10px}.status.err{background:#fef2f2;color:#991b1b}.status.ok{background:#ecfdf5;color:#065f46}
+    h1{font-size:28px;margin:0 0 8px}.sub{color:var(--muted);margin:0 0 18px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    label{display:block;margin:10px 0 6px;font-weight:650}input,textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:9px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:#fff}textarea{min-height:116px}button{border:0;border-radius:9px;padding:10px 14px;margin:6px 6px 6px 0;cursor:pointer;background:var(--primary);color:#fff;font-weight:650}button.secondary{background:#374151}button.blue{background:var(--blue)}button.danger{background:var(--red)}button.green{background:var(--green)}button:disabled{opacity:.5;cursor:not-allowed}pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px;overflow:auto;max-height:360px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:820px){.row{grid-template-columns:1fr}}.muted{color:var(--muted);font-size:13px}.ok{color:var(--green);font-weight:700}.bad{color:var(--red);font-weight:700}.pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 9px;margin:3px;background:#f9fafb;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:13px}code{background:#eef2ff;padding:2px 5px;border-radius:5px}.small{font-size:12px}.status{padding:10px 12px;border-radius:10px;background:#eef2ff;color:#1e3a8a;margin-top:10px}.status.err{background:#fef2f2;color:#991b1b}.status.ok{background:#ecfdf5;color:#065f46}.status.warn{background:#fffbeb;color:#92400e}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.right{float:right}.link{color:#2563eb;cursor:pointer;text-decoration:underline}.banner{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:12px;padding:10px 12px;margin:12px 0}
   </style>
 </head>
 <body>
   <h1>CloudflareSub 管理后台</h1>
-  <p class="sub">更简单的版本：可以直接粘贴完整订阅链接，后台自动提取订阅 ID 和 Token；也可以直接列出已有订阅并一键载入。</p>
+  <p class="sub">可直接粘贴完整订阅链接，自动提取订阅 ID 和 Token；也可以读取 KV 中已有订阅并一键载入、修改优选 IP、保存回原订阅 ID。</p>
+  <div class="banner">推荐入口：<code>/api/admin/ui</code>。如果 <code>/admin</code> 被静态页面拦截，仍可使用备用入口。</div>
 
   <div class="card">
     <label>① 粘贴完整订阅链接，一键提取</label>
     <input id="subUrl" placeholder="例如：https://你的域名/sub/BSEMXUeWJK?target=raw&token=xxxx" />
-    <button class="blue" onclick="extractFromUrl()">从订阅链接提取 ID 和 Token</button>
-    <button class="secondary" onclick="testCurrentSub()">测试这个订阅是否可访问</button>
+    <div class="toolbar">
+      <button class="blue" id="btnExtract">从订阅链接提取 ID 和 Token</button>
+      <button class="secondary" id="btnTestSub">测试这个订阅是否可访问</button>
+      <button class="secondary" id="btnOpenApiUi">打开备用入口</button>
+    </div>
     <div id="status" class="status">等待操作。</div>
   </div>
 
   <div class="card">
     <label>② 管理 Token（SUB_ACCESS_TOKEN）</label>
     <input id="token" placeholder="输入 SUB_ACCESS_TOKEN；也可以从上面的订阅链接自动提取" />
-    <button onclick="saveToken()">保存 Token</button>
-    <button class="secondary" onclick="listSubs()">列出已有订阅</button>
-    <span class="muted">保存 Token 只是保存到当前浏览器 localStorage，不会修改 Cloudflare 变量。</span>
+    <div class="toolbar">
+      <button id="btnSaveToken">保存 Token</button>
+      <button class="secondary" id="btnListSubs">列出已有订阅</button>
+    </div>
+    <p class="muted">“保存 Token”只是保存到当前浏览器 localStorage，不会修改 Cloudflare 变量。</p>
     <div id="subList"></div>
   </div>
 
@@ -852,14 +858,16 @@ function renderAdminPage() {
     <label><input type="checkbox" id="keepOriginalHost" checked style="width:auto"> 保留原始 Host/SNI（建议开启）</label>
 
     <label>原始节点链接 nodeLinks</label>
-    <textarea id="nodeLinks" placeholder="粘贴 vless:// / vmess:// / trojan:// 原始节点。注意：新版支持旧订阅只改 IP；如果这里为空，也可以直接保存优选 IP，系统会尝试从旧订阅反推基础节点。"></textarea>
+    <textarea id="nodeLinks" placeholder="粘贴 vless:// / vmess:// / trojan:// 原始节点。旧订阅若没有保存原始节点，这里可以为空，系统会尝试从旧订阅 nodes 反推基础节点。"></textarea>
 
     <label>优选 IP preferredIps</label>
     <textarea id="preferredIps" placeholder="104.16.1.2:443#CF-01\n104.17.2.3:443#CF-02"></textarea>
 
-    <button onclick="loadSub()">读取订阅</button>
-    <button class="green" onclick="updateSub()">保存/更新这个 ID</button>
-    <button class="danger" onclick="deleteSub()">删除这个 ID</button>
+    <div class="toolbar">
+      <button id="btnLoadSub">读取订阅</button>
+      <button class="green" id="btnUpdateSub">保存/更新这个 ID</button>
+      <button class="danger" id="btnDeleteSub">删除这个 ID</button>
+    </div>
   </div>
 
   <div class="card">
@@ -868,21 +876,28 @@ function renderAdminPage() {
   </div>
 
 <script>
-const $ = id => document.getElementById(id);
-$('token').value = localStorage.getItem('sub_token') || '';
+(function(){
+'use strict';
+var $ = function(id){ return document.getElementById(id); };
+var safeJson = function(x){ try { return JSON.stringify(x, null, 2); } catch(e) { return String(x); } };
+var out = function(x){ $('result').textContent = typeof x === 'string' ? x : safeJson(x); };
+var setStatus = function(msg, type){ var el = $('status'); el.textContent = msg; el.className = 'status ' + (type || ''); };
+var origin = function(){ return location.origin; };
+var getToken = function(){ return ($('token').value || '').trim(); };
+var tokenQS = function(){ return '?token=' + encodeURIComponent(getToken()); };
+var rawUrl = function(id){ return origin() + '/sub/' + encodeURIComponent(id) + '?target=raw&token=' + encodeURIComponent(getToken()); };
+var escapeHtml = function(s){ return String(s || '').replace(/[&<>\"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
 
-function setStatus(msg, type){
-  const el = $('status');
-  el.textContent = msg;
-  el.className = 'status ' + (type || '');
+function requireToken(){
+  if(!getToken()){
+    setStatus('请先填写 Token，或从完整订阅链接中自动提取。', 'err');
+    return false;
+  }
+  return true;
 }
-function tokenQS() { return '?token=' + encodeURIComponent($('token').value.trim()); }
-function out(x){ $('result').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); }
-function origin(){ return location.origin; }
-function rawUrl(id){ return origin() + '/sub/' + encodeURIComponent(id) + '?target=raw&token=' + encodeURIComponent($('token').value.trim()); }
 
 function saveToken(){
-  const t = $('token').value.trim();
+  var t = getToken();
   if(!t){ setStatus('Token 为空。请先填 SUB_ACCESS_TOKEN，或从订阅链接提取。','err'); return; }
   localStorage.setItem('sub_token', t);
   setStatus('Token 已保存到当前浏览器。现在可以点击“列出已有订阅”。','ok');
@@ -890,103 +905,139 @@ function saveToken(){
 }
 
 function extractFromUrl(){
-  const v = $('subUrl').value.trim();
+  var v = ($('subUrl').value || '').trim();
   if(!v){ setStatus('请先粘贴完整订阅链接。','err'); return; }
-  let u;
+  var u;
   try { u = new URL(v, location.origin); } catch(e) { setStatus('订阅链接格式不正确。','err'); out(String(e)); return; }
-  const parts = u.pathname.split('/').filter(Boolean);
-  const subIndex = parts.indexOf('sub');
-  const id = subIndex >= 0 ? parts[subIndex + 1] : '';
-  const token = u.searchParams.get('token') || '';
+  var parts = u.pathname.split('/').filter(Boolean);
+  var subIndex = parts.indexOf('sub');
+  var id = subIndex >= 0 ? parts[subIndex + 1] : '';
+  var token = u.searchParams.get('token') || '';
   if(!id){ setStatus('没有从链接里识别到 /sub/订阅ID。','err'); return; }
   $('subId').value = id;
   if(token){ $('token').value = token; localStorage.setItem('sub_token', token); }
   setStatus('已提取：订阅 ID = ' + id + (token ? '，Token 已填入并保存。' : '。但链接里没有 token。'), 'ok');
-  out({ok:true,id,token: token ? '已提取' : '未找到'});
+  out({ok:true,id:id,token: token ? '已提取' : '未找到'});
 }
 
 async function testCurrentSub(){
-  const id = $('subId').value.trim();
-  if(!id){ extractFromUrl(); }
-  const finalId = $('subId').value.trim();
-  if(!finalId){ return; }
-  const r = await fetch(rawUrl(finalId));
-  const txt = await r.text();
-  setStatus(r.ok ? '订阅可访问。HTTP ' + r.status : '订阅不可访问。HTTP ' + r.status, r.ok ? 'ok' : 'err');
-  out(txt.slice(0, 800));
+  if(!$('subId').value.trim()) extractFromUrl();
+  var id = $('subId').value.trim();
+  if(!id || !requireToken()) return;
+  try{
+    var r = await fetch(rawUrl(id));
+    var txt = await r.text();
+    setStatus(r.ok ? '订阅可访问。HTTP ' + r.status : '订阅不可访问。HTTP ' + r.status, r.ok ? 'ok' : 'err');
+    out(txt.slice(0, 1000));
+  }catch(e){ setStatus('测试失败：' + e.message, 'err'); out(String(e)); }
 }
 
 function renderList(items){
   if(!items || !items.length){ $('subList').innerHTML = '<p class="muted">没有找到订阅。</p>'; return; }
-  const rows = items.map(it => {
-    const id = it.id;
-    const url = rawUrl(id);
-    return '<tr>' +
+  var html = '<table><thead><tr><th>订阅 ID</th><th>过期时间</th><th>操作</th></tr></thead><tbody>';
+  items.forEach(function(it){
+    var id = it.id;
+    var exp = it.expiration ? new Date(it.expiration * 1000).toLocaleString() : '无/未知';
+    html += '<tr>' +
       '<td><code>' + escapeHtml(id) + '</code></td>' +
-      '<td class="small">' + (it.expiration ? new Date(it.expiration*1000).toLocaleString() : '无/未知') + '</td>' +
-      '<td><button class="secondary" onclick="selectSub(\'' + escapeJs(id) + '\')">载入</button><button onclick="copyText(\'' + escapeJs(url) + '\')">复制 raw 链接</button></td>' +
-      '</tr>';
-  }).join('');
-  $('subList').innerHTML = '<table><thead><tr><th>订阅 ID</th><th>过期时间</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      '<td class="small">' + escapeHtml(exp) + '</td>' +
+      '<td>' +
+        '<button class="secondary" type="button" data-action="load" data-id="' + escapeHtml(id) + '">载入</button>' +
+        '<button type="button" data-action="copy" data-url="' + escapeHtml(rawUrl(id)) + '">复制 raw 链接</button>' +
+      '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  $('subList').innerHTML = html;
 }
-function escapeHtml(s){ return String(s).replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function escapeJs(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-async function copyText(t){ await navigator.clipboard.writeText(t); setStatus('已复制：' + t, 'ok'); }
-async function selectSub(id){ $('subId').value = id; await loadSub(); }
 
 async function listSubs(){
-  const t = $('token').value.trim();
-  if(!t){ setStatus('请先填写或提取 Token。','err'); return; }
-  const r = await fetch('/api/admin/list' + tokenQS());
-  const j = await r.json();
-  out(j);
-  if(j.ok){ setStatus('已列出 ' + j.count + ' 条订阅。点击“载入”即可编辑。','ok'); renderList(j.items); }
-  else { setStatus('列出失败：' + (j.error || '未知错误'), 'err'); }
+  if(!requireToken()) return;
+  try{
+    var r = await fetch('/api/admin/list' + tokenQS());
+    var j = await r.json();
+    out(j);
+    if(j.ok){ setStatus('已列出 ' + j.count + ' 条订阅。点击“载入”即可编辑。','ok'); renderList(j.items || []); }
+    else { setStatus('列出失败：' + (j.error || '未知错误'), 'err'); }
+  }catch(e){ setStatus('列出失败：' + e.message, 'err'); out(String(e)); }
 }
 
-async function loadSub(){
-  const id = $('subId').value.trim();
+async function loadSub(idOverride){
+  if(!requireToken()) return;
+  var id = (idOverride || $('subId').value || '').trim();
   if(!id){ setStatus('请先填写订阅 ID，或粘贴订阅链接提取。','err'); return; }
-  const r = await fetch('/api/admin/get' + tokenQS() + '&id=' + encodeURIComponent(id));
-  const j = await r.json();
-  if(j.ok){
-    $('nodeLinks').value = j.editable.nodeLinks || '';
-    $('preferredIps').value = j.editable.preferredIps || '';
-    $('namePrefix').value = j.editable.namePrefix || 'CF';
-    $('keepOriginalHost').checked = j.editable.keepOriginalHost !== false;
-    setStatus(j.editable.hasOriginalInput ? '读取成功。可直接修改 IP 后保存。' : '读取成功。旧订阅没有保存原始节点，但新版支持直接修改 IP 后保存。', 'ok');
-  } else { setStatus('读取失败：' + (j.error || '未知错误'), 'err'); }
-  out(j);
+  $('subId').value = id;
+  try{
+    var r = await fetch('/api/admin/get' + tokenQS() + '&id=' + encodeURIComponent(id));
+    var j = await r.json();
+    if(j.ok){
+      $('nodeLinks').value = (j.editable && j.editable.nodeLinks) || '';
+      $('preferredIps').value = (j.editable && j.editable.preferredIps) || '';
+      $('namePrefix').value = (j.editable && j.editable.namePrefix) || 'CF';
+      $('keepOriginalHost').checked = !j.editable || j.editable.keepOriginalHost !== false;
+      setStatus(j.editable && j.editable.hasOriginalInput ? '读取成功。可直接修改 IP 后保存。' : '读取成功。旧订阅没有保存原始节点，但新版支持直接修改 IP 后保存。', 'ok');
+    } else { setStatus('读取失败：' + (j.error || '未知错误'), 'err'); }
+    out(j);
+  }catch(e){ setStatus('读取失败：' + e.message, 'err'); out(String(e)); }
 }
 
 async function updateSub(){
-  const payload = {
+  if(!requireToken()) return;
+  var payload = {
     id: $('subId').value.trim(),
-    nodeLinks: $('nodeLinks').value,
-    preferredIps: $('preferredIps').value,
-    namePrefix: $('namePrefix').value,
+    nodeLinks: $('nodeLinks').value || '',
+    preferredIps: $('preferredIps').value || '',
+    namePrefix: $('namePrefix').value || '',
     keepOriginalHost: $('keepOriginalHost').checked
   };
   if(!payload.id){ setStatus('订阅 ID 不能为空。','err'); return; }
   if(!payload.preferredIps.trim()){ setStatus('优选 IP 不能为空。','err'); return; }
-  const r = await fetch('/api/admin/update' + tokenQS(), {
-    method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(payload)
-  });
-  const j = await r.json();
-  if(j.ok){ setStatus('保存成功。旧订阅链接不变，客户端更新订阅即可。', 'ok'); }
-  else { setStatus('保存失败：' + (j.error || '未知错误'), 'err'); }
-  out(j);
+  try{
+    var r = await fetch('/api/admin/update' + tokenQS(), { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(payload) });
+    var j = await r.json();
+    if(j.ok){ setStatus('保存成功。旧订阅链接不变，客户端更新订阅即可。', 'ok'); }
+    else { setStatus('保存失败：' + (j.error || '未知错误'), 'err'); }
+    out(j);
+  }catch(e){ setStatus('保存失败：' + e.message, 'err'); out(String(e)); }
 }
 
 async function deleteSub(){
+  if(!requireToken()) return;
+  var id = $('subId').value.trim();
+  if(!id){ setStatus('请先填写订阅 ID。','err'); return; }
   if(!confirm('确认删除这个订阅？')) return;
-  const r = await fetch('/api/admin/delete' + tokenQS(), {
-    method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id: $('subId').value.trim() })
-  });
-  const j = await r.json();
-  if(j.ok){ setStatus('已删除订阅：' + j.deleted, 'ok'); listSubs(); } else { setStatus('删除失败：' + (j.error || '未知错误'), 'err'); }
-  out(j);
+  try{
+    var r = await fetch('/api/admin/delete' + tokenQS(), { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id: id }) });
+    var j = await r.json();
+    if(j.ok){ setStatus('已删除订阅：' + j.deleted, 'ok'); listSubs(); }
+    else { setStatus('删除失败：' + (j.error || '未知错误'), 'err'); }
+    out(j);
+  }catch(e){ setStatus('删除失败：' + e.message, 'err'); out(String(e)); }
 }
+
+function openApiUi(){ location.href = '/api/admin/ui'; }
+async function copyText(t){ try{ await navigator.clipboard.writeText(t); setStatus('已复制：' + t, 'ok'); }catch(e){ setStatus('复制失败，请手动复制。', 'err'); out(t); } }
+
+window.addEventListener('DOMContentLoaded', function(){
+  $('token').value = localStorage.getItem('sub_token') || '';
+  $('btnExtract').addEventListener('click', extractFromUrl);
+  $('btnTestSub').addEventListener('click', testCurrentSub);
+  $('btnOpenApiUi').addEventListener('click', openApiUi);
+  $('btnSaveToken').addEventListener('click', saveToken);
+  $('btnListSubs').addEventListener('click', listSubs);
+  $('btnLoadSub').addEventListener('click', function(){ loadSub(); });
+  $('btnUpdateSub').addEventListener('click', updateSub);
+  $('btnDeleteSub').addEventListener('click', deleteSub);
+  $('subList').addEventListener('click', function(ev){
+    var btn = ev.target.closest('button[data-action]');
+    if(!btn) return;
+    var action = btn.getAttribute('data-action');
+    if(action === 'load') loadSub(btn.getAttribute('data-id'));
+    if(action === 'copy') copyText(btn.getAttribute('data-url'));
+  });
+  setStatus('后台脚本已加载。可以粘贴订阅链接，或输入 Token 后列出已有订阅。','ok');
+});
+})();
 </script>
 </body>
 </html>`;
